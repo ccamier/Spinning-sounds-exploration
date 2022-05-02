@@ -7,13 +7,11 @@ Created on Thu Apr 28 12:31:55 2022
 
 import streamlit as st
 import numpy as np
-import scipy
+import wave, struct
 from pylab import plt
 import os
-import scipy.io.wavfile as wa
-from Levels import Leq,Leq_per_band,plot_levels
+#import scipy.io.wavfile as wa
 
-#streamlit layout
 col1,col2 = st.columns([1.5,1]);
 
 #global physical parameters
@@ -40,6 +38,37 @@ parameters['R_receiver'] = .1# [m]
 parameters['list_options']= ['emission','phased_emis','propag_phased_emis','doppler_propag_phased_emis'];
 parameters['compute']={};
 parameters['audio_folder_name'] = os.path.join(os.getcwd(),'circular_sounds/');
+
+def wa_write(name,fs=None,data=np.array([])):
+    sampleRate = np.float32(fs) # hertz
+    obj = wave.open(name,'w')
+    obj.setnchannels(1) # mono
+    obj.setsampwidth(2)
+    obj.setframerate(sampleRate)
+    for value in iter(data):
+        data = struct.pack('<h', value)
+        obj.writeframesraw( data )
+    obj.close()
+
+def tukey_win(N,ratio=1.):
+    N_ratio = np.int32(N*ratio/2)*2
+    hann = np.hanning(N_ratio)
+    return np.append(np.append(hann[0:int(N_ratio/2)] , np.ones(N-N_ratio)), hann[int(N_ratio/2):] )
+
+def Leq(p,T=1,fs=48000,t_init = [0],ref=1):
+    # Return the list of Leq,T computed from the list of initial time
+    # T: Computation time range [s]
+    # t_init: list of initial times [s]
+    ref = ref #[Pa]
+    L=np.zeros(len(t_init))
+    if len(p)< (t_init[-1]+T)*fs:
+        print('p is not long enough for the requested t_init and T')
+        return None
+    for ind,ti in enumerate(t_init):
+        p_temp = p[ int(np.round(ti*fs)) : int(np.round((ti+T)*fs))]
+        #L[ind] = 10*np.log10(1./T * np.trapz([pow(p_temp[i],2)/(pow(p0,2)) for i in range(len(p_temp))],dx = 1./fs))
+        L[ind] = 10*np.log10(1./(T*fs)*sum(p_temp*p_temp)*(ref*ref))
+    return L
 
 def signals_compute(parameters):
     signals = {}
@@ -181,13 +210,16 @@ def scheme_plot(parameters):
     col2.pyplot(figure)
 def produce_audio(parameters,signals):
     col2.subheader("Audio files")
+    signals.update({'audio_files':{}})
     for signal_key in iter(parameters['compute']):
         if parameters['compute'][signal_key]:
-            wa.write(parameters['audio_folder_name']+signal_key+'.wav', parameters['fs'] , np.array([np.int32(val) for val in iter((scipy.signal.windows.tukey(len(signals[signal_key]),.1)*signals[signal_key]/np.max(signals[signal_key]))*(2**30))]));
-            audio_file = open(parameters['audio_folder_name']+signal_key+'.wav', 'rb');
-            audio_bytes = audio_file.read();
+            #wa_write(parameters['audio_folder_name']+signal_key+'.wav', parameters['fs'] , np.array([np.int16(val) for val in iter((tukey_win(len(signals[signal_key]),.1)*signals[signal_key]/np.max(signals[signal_key]))*(2**15-1))]) );
+            wa_write(signal_key+'.wav', parameters['fs'] , np.array([np.int16(val) for val in iter((tukey_win(len(signals[signal_key]),.1)*signals[signal_key]/np.max(signals[signal_key]))*(2**15-1))]) );
+            
+            #audio_file = open(parameters['audio_folder_name']+signal_key+'.wav', 'rb');
+            #audio_bytes = audio_file.read(np.array([np.int16(val) for val in iter((tukey_win(len(signals[signal_key]),.1)*signals[signal_key]/np.max(signals[signal_key]))*(2**15-1))]) );
             col2.text(signal_key)
-            col2.audio(audio_bytes, format='audio/ogg' );
+            col2.audio(signal_key+'.wav', format='wav' );
 
 st.sidebar.header('Circular trajectory moving source at high velocities')
 
