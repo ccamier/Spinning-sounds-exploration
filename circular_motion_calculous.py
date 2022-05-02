@@ -8,7 +8,8 @@ Created on Thu Apr 28 12:31:55 2022
 import streamlit as st
 import numpy as np
 import wave, struct
-from pylab import plt
+#from pylab import plt
+import matplotlib.pyplot as plt
 import os
 #import scipy.io.wavfile as wa
 
